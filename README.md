@@ -1,40 +1,40 @@
 # SwinIR + Adaptive Edge-Aware Loss for Anime Face Super-Resolution
 
-Implementasi *image super-resolution* (SR) berbasis **SwinIR** (Swin Transformer for Image Restoration) yang dimodifikasi dengan **fungsi loss berbasis edge (Sobel) adaptif** untuk meningkatkan ketajaman garis/outline pada gambar anime, dievaluasi pada dataset *Anime Faces (Waifu2x)*.
+An *image super-resolution* (SR) implementation based on **SwinIR** (Swin Transformer for Image Restoration), modified with an **adaptive edge-based (Sobel) loss function** to improve line/outline sharpness in anime images, evaluated on the *Anime Faces (Waifu2x)* dataset.
 
-> Arsitektur backbone mengacu pada paper:
+> Backbone architecture follows the paper:
 > **Liang et al., "SwinIR: Image Restoration Using Swin Transformer," ICCV Workshops, 2021.**
 > [arXiv:2108.10257](https://arxiv.org/abs/2108.10257) · [Official Repo](https://github.com/JingyunLiang/SwinIR)
 
 ---
 
-## 📖 Daftar Isi
+## 📖 Table of Contents
 
-- [Ringkasan](#-ringkasan)
-- [Arsitektur Model (SwinIR)](#-arsitektur-model-swinir)
-- [Kontribusi / Modifikasi pada Proyek Ini](#-kontribusi--modifikasi-pada-proyek-ini)
+- [Overview](#-overview)
+- [Model Architecture (SwinIR)](#-model-architecture-swinir)
+- [Contributions / Modifications in This Project](#-contributions--modifications-in-this-project)
 - [Dataset & Preprocessing](#-dataset--preprocessing)
 - [Loss Function](#-loss-function)
-- [Evaluasi & Metrik](#-evaluasi--metrik)
-- [Konfigurasi Eksperimen](#-konfigurasi-eksperimen)
-- [Struktur Proyek](#-struktur-proyek)
-- [Cara Menjalankan](#-cara-menjalankan)
+- [Evaluation & Metrics](#-evaluation--metrics)
+- [Experiment Configuration](#-experiment-configuration)
+- [Project Structure](#-project-structure)
+- [How to Run](#-how-to-run)
 - [Checkpoint & Metadata](#-checkpoint--metadata)
-- [Batasan & Catatan Teknis](#-batasan--catatan-teknis)
-- [Rencana Pengembangan](#-rencana-pengembangan)
-- [Referensi](#-referensi)
+- [Limitations & Technical Notes](#-limitations--technical-notes)
+- [Future Work](#-future-work)
+- [References](#-references)
 
 ---
 
-## 🧩 Ringkasan
+## 🧩 Overview
 
-Proyek ini mengimplementasikan ulang arsitektur **SwinIR** secara penuh (tanpa modifikasi struktural) sebagai backbone *super-resolution* (×2), kemudian menambahkan **komponen loss tambahan berbasis gradien (edge-aware)** untuk mendorong model menghasilkan tepi/garis (outline) yang lebih tajam — karakteristik penting pada citra anime yang umumnya memiliki *line art* tegas. Selain itu, ditambahkan metrik evaluasi khusus **Edge-PSNR** untuk mengukur kualitas rekonstruksi secara spesifik pada area tepi gambar, di luar metrik standar PSNR/SSIM.
+This project fully reimplements the **SwinIR** architecture (with no structural modifications) as a ×2 *super-resolution* backbone, then adds a **gradient-based (edge-aware) loss component** to encourage the model to produce sharper edges/outlines — an important characteristic for anime images, which typically feature crisp *line art*. In addition, a dedicated **Edge-PSNR** evaluation metric is introduced to specifically measure reconstruction quality at image edges, beyond the standard PSNR/SSIM metrics.
 
 ---
 
-## 🏗️ Arsitektur Model (SwinIR)
+## 🏗️ Model Architecture (SwinIR)
 
-Backbone yang digunakan adalah implementasi **SwinIR original** (RSTB + STL) tanpa perubahan struktural, terdiri dari tiga modul utama:
+The backbone used is the **original SwinIR implementation** (RSTB + STL) with no structural changes, consisting of three main modules:
 
 ```
 Input (LQ) ──► Shallow Feature Extraction (Conv 3×3)
@@ -42,9 +42,9 @@ Input (LQ) ──► Shallow Feature Extraction (Conv 3×3)
                         ▼
               Deep Feature Extraction
         ┌─────────────────────────────────┐
-        │  RSTB → RSTB → ... → RSTB → Conv │   (K buah Residual Swin
-        └─────────────────────────────────┘    Transformer Block)
-                        │   (+ long skip connection dari shallow feature)
+        │  RSTB → RSTB → ... → RSTB → Conv │   (K Residual Swin
+        └─────────────────────────────────┘    Transformer Blocks)
+                        │   (+ long skip connection from shallow feature)
                         ▼
               HQ Image Reconstruction
                   (Sub-pixel Conv / PixelShuffle)
@@ -54,51 +54,51 @@ Input (LQ) ──► Shallow Feature Extraction (Conv 3×3)
 ```
 
 **Residual Swin Transformer Block (RSTB):**
-- Terdiri dari beberapa **Swin Transformer Layer (STL)** + 1 convolutional layer + residual connection.
-- STL menggunakan **Window-based Multi-head Self-Attention (W-MSA)** dengan *relative position bias*, serta **shifted window** secara alternatif antar-layer untuk membangun koneksi antar-window (cross-window interaction).
-- Setiap STL: `LayerNorm → MSA → residual → LayerNorm → MLP (GELU) → residual`.
+- Composed of several **Swin Transformer Layers (STL)** + 1 convolutional layer + residual connection.
+- STL uses **Window-based Multi-head Self-Attention (W-MSA)** with *relative position bias*, along with **shifted windows** alternating between layers to enable cross-window interaction.
+- Each STL: `LayerNorm → MSA → residual → LayerNorm → MLP (GELU) → residual`.
 
-**Konfigurasi model yang digunakan pada proyek ini** (`model_size = 'large'`):
+**Model configuration used in this project** (`model_size = 'large'`):
 
-| Parameter | Nilai |
+| Parameter | Value |
 |---|---|
 | Upscale factor | ×2 |
 | Window size | 8 |
 | Embedding dim | 180 |
-| Depths (jumlah STL per RSTB) | [6, 6, 6, 6] |
-| Jumlah attention heads | [6, 6, 6, 6] |
+| Depths (STL count per RSTB) | [6, 6, 6, 6] |
+| Number of attention heads | [6, 6, 6, 6] |
 | MLP ratio | 2 |
 | Upsampler | `pixelshuffle` |
-| Residual connection di RSTB | `1conv` |
+| Residual connection in RSTB | `1conv` |
 | Input size (LR) | 64×64 → Output (HR) 128×128 |
 
-Implementasi modul (`Mlp`, `WindowAttention`, `SwinTransformerBlock`, `RSTB`, `SwinIR`, dll.) diadaptasi langsung dari kode resmi SwinIR (kredit: Ze Liu, dimodifikasi oleh Jingyun Liang), **tanpa perubahan pada arsitektur intinya**.
+Module implementations (`Mlp`, `WindowAttention`, `SwinTransformerBlock`, `RSTB`, `SwinIR`, etc.) are adapted directly from the official SwinIR code (credit: Ze Liu, modified by Jingyun Liang), **with no changes to the core architecture**.
 
 ---
 
-## 🚀 Kontribusi / Modifikasi pada Proyek Ini
+## 🚀 Contributions / Modifications in This Project
 
-Yang membedakan proyek ini dari SwinIR baseline (paper asli hanya menggunakan **L1 pixel loss** untuk SR klasik) adalah pada **sisi loss function dan metrik evaluasi**, bukan pada arsitektur:
+What differentiates this project from baseline SwinIR (the original paper uses only **L1 pixel loss** for classical SR) lies in the **loss function and evaluation metrics**, not the architecture:
 
 ### 1. Sobel-based Edge Extraction Module
-Modul `SobelOperator` yang mengekstrak *gradient magnitude* dari gambar menggunakan kernel Sobel horizontal & vertikal, diterapkan secara *depthwise* (per-channel) melalui `F.conv2d` dengan `groups=C`. Modul ini menjadi dasar dari seluruh varian loss berbasis edge di bawah.
+A `SobelOperator` module that extracts *gradient magnitude* from an image using horizontal and vertical Sobel kernels, applied *depthwise* (per-channel) via `F.conv2d` with `groups=C`. This module forms the basis of every edge-based loss variant below.
 
 ### 2. Sobel Loss
-Loss tambahan yang membandingkan *edge map* hasil prediksi terhadap *edge map* ground truth, alih-alih membandingkan piksel mentah:
+An additional loss that compares the predicted *edge map* against the ground-truth *edge map*, instead of comparing raw pixels:
 
 ```
 L_sobel = w · ‖Sobel(I_pred) − Sobel(I_target)‖₁
 ```
 
-### 3. Combined Loss (Pixel + Sobel, weighted statis)
-Kombinasi pixel loss (dapat dipilih L1 / Charbonnier / MSE) dengan Sobel loss berbobot tetap:
+### 3. Combined Loss (Pixel + Sobel, static weighting)
+A combination of pixel loss (selectable as L1 / Charbonnier / MSE) with a fixed-weight Sobel loss:
 
 ```
 L_combined = w_pixel · L_pixel + L_sobel
 ```
 
-### 4. ⭐ Adaptive Sobel Loss (loss utama yang digunakan)
-**Ini adalah kontribusi utama proyek.** Berbeda dari Sobel loss biasa, bobot kontribusi tiap piksel terhadap loss edge **disesuaikan secara dinamis berdasarkan kekuatan edge ground truth itu sendiri** (min-max normalized), sehingga area dengan tepi/garis tajam diberi penalti lebih besar dibanding area datar:
+### 4. ⭐ Adaptive Sobel Loss (main loss used)
+**This is the project's main contribution.** Unlike standard Sobel loss, the per-pixel contribution to the edge loss is **dynamically adjusted based on the strength of the ground-truth edge itself** (min-max normalized), so that areas with sharp edges/lines are penalized more heavily than flat areas:
 
 ```
 edge_weight = (E_target − min(E_target)) / (max(E_target) − min(E_target) + ε)
@@ -106,12 +106,12 @@ L_edge      = mean( edge_weight · |E_pred − E_target| )
 L_total     = w_pixel · L_pixel(L1) + w_sobel · L_edge
 ```
 
-dengan `E(·) = Sobel(·)`.
+where `E(·) = Sobel(·)`.
 
-**Motivasi:** pada gambar anime, garis outline (edge tegas) jauh lebih penting secara perseptual dibanding tekstur halus pada area datar (kulit, background polos). Bobot adaptif ini mendorong model untuk memprioritaskan rekonstruksi garis tanpa mengorbankan stabilitas training pada area non-edge.
+**Motivation:** in anime images, outline edges (sharp boundaries) are perceptually far more important than fine texture in flat areas (skin, plain backgrounds). This adaptive weighting pushes the model to prioritize edge reconstruction without sacrificing training stability in non-edge regions.
 
-### 5. Edge-PSNR — Metrik Evaluasi Tambahan
-Selain PSNR dan SSIM standar, ditambahkan metrik **Edge-PSNR**: PSNR yang dihitung **hanya pada piksel yang teridentifikasi sebagai tepi** (berdasarkan *edge mask* dari gambar HR ground truth, dengan threshold magnitude Sobel tertentu). Metrik ini memberikan gambaran lebih spesifik soal seberapa baik model merekonstruksi detail garis, yang tidak ditangkap secara memadai oleh PSNR global.
+### 5. Edge-PSNR — Additional Evaluation Metric
+In addition to standard PSNR and SSIM, an **Edge-PSNR** metric is introduced: PSNR computed **only on pixels identified as edges** (based on an *edge mask* derived from the ground-truth HR image, using a specific Sobel magnitude threshold). This metric provides a more specific view of how well the model reconstructs line detail, which is not adequately captured by global PSNR.
 
 ```
 mask        = 1[ Sobel_magnitude(I_HR) > threshold ]
@@ -119,60 +119,60 @@ Edge-MSE    = Σ( mask · (I_SR − I_HR)² ) / Σ(mask)
 Edge-PSNR   = 10 · log10( 1 / Edge-MSE )
 ```
 
-| Aspek | SwinIR (Paper Asli) | Proyek Ini |
+| Aspect | SwinIR (Original Paper) | This Project |
 |---|---|---|
-| Arsitektur | RSTB + STL | **Sama (tidak diubah)** |
-| Loss (SR klasik) | L1 pixel loss saja | L1 pixel loss + **Adaptive Sobel Edge Loss** |
-| Metrik evaluasi | PSNR, SSIM | PSNR, SSIM, **Edge-PSNR** |
-| Domain data | Natural images (DIV2K, dll.) | **Anime faces** (Waifu2x dataset) |
-| Skala | ×2 / ×3 / ×4 | ×2 |
+| Architecture | RSTB + STL | **Same (unchanged)** |
+| Loss (classical SR) | L1 pixel loss only | L1 pixel loss + **Adaptive Sobel Edge Loss** |
+| Evaluation metrics | PSNR, SSIM | PSNR, SSIM, **Edge-PSNR** |
+| Data domain | Natural images (DIV2K, etc.) | **Anime faces** (Waifu2x dataset) |
+| Scale | ×2 / ×3 / ×4 | ×2 |
 
 ---
 
 ## 📂 Dataset & Preprocessing
 
-- **Sumber:** [Anime Faces (Waifu2x)](https://www.kaggle.com/datasets) — dataset wajah karakter anime.
+- **Source:** [Anime Faces (Waifu2x)](https://www.kaggle.com/datasets) — an anime character face dataset.
 - **Preprocessing:**
-  - Gambar HR diresize ke **128×128** (bicubic interpolation).
-  - Gambar LR digenerate dari HR dengan downsampling ke **64×64** (bicubic), sehingga scale factor = ×2.
-  - Split data: **90% train / 10% test** (`train_test_split`, `random_state=42`).
-  - Disimpan dalam struktur folder `train/{HR,LR}` dan `test/{HR,LR}` sebagai pasangan gambar dengan nama file identik.
-- **Dataset class:** `SRDataset` (pasangan LR–HR dari folder terpisah) dan `SingleFolderDataset` (LR digenerate on-the-fly dari folder HR tunggal) — keduanya mengembalikan tensor ternormalisasi ke rentang `[0, 1]`.
+  - HR images are resized to **128×128** (bicubic interpolation).
+  - LR images are generated from HR via downsampling to **64×64** (bicubic), giving a scale factor of ×2.
+  - Data split: **90% train / 10% test** (`train_test_split`, `random_state=42`).
+  - Stored in a `train/{HR,LR}` and `test/{HR,LR}` folder structure as image pairs with identical filenames.
+- **Dataset classes:** `SRDataset` (paired LR–HR from separate folders) and `SingleFolderDataset` (LR generated on-the-fly from a single HR folder) — both return tensors normalized to the `[0, 1]` range.
 
-> ⚠️ Catatan: pada konfigurasi eksperimen yang disertakan, terdapat parameter `LIMIT_DATA` yang membatasi jumlah data yang diproses (berguna untuk *quick testing*/debugging pipeline). Pastikan nilai ini disesuaikan (atau di-set `None`) sebelum training skala penuh.
+> ⚠️ Note: in the included experiment configuration, there is a `LIMIT_DATA` parameter that caps the amount of data processed (useful for *quick testing*/pipeline debugging). Make sure this value is adjusted (or set to `None`) before full-scale training.
 
 ---
 
 ## 🎯 Loss Function
 
-Loss dipilih melalui parameter `config.loss_type`, dengan 4 opsi: `'l1'`, `'sobel'`, `'combined'`, `'adaptive'`.
+The loss is selected via the `config.loss_type` parameter, with 4 options: `'l1'`, `'sobel'`, `'combined'`, `'adaptive'`.
 
-**Konfigurasi yang digunakan pada eksperimen final:**
+**Configuration used in the final experiment:**
 ```python
 loss_type     = 'adaptive'   # AdaptiveSobelLoss
 pixel_weight  = 1.0
-sobel_weight  = 0.1          # direkomendasikan 0.1–0.5 untuk domain anime
+sobel_weight  = 0.1          # recommended 0.1–0.5 for the anime domain
 ```
 
-Pixel loss dasar menggunakan **L1**, dipilih agar konsisten dengan konvensi training SR pada paper SwinIR, sebelum ditambah komponen edge adaptif.
+The base pixel loss uses **L1**, chosen to stay consistent with the SR training convention from the SwinIR paper, before adding the adaptive edge component.
 
 ---
 
-## 📊 Evaluasi & Metrik
+## 📊 Evaluation & Metrics
 
-| Metrik | Deskripsi |
+| Metric | Description |
 |---|---|
-| **PSNR** | Dihitung global per-gambar menggunakan `skimage.metrics.peak_signal_noise_ratio`, dirata-rata per batch. |
-| **SSIM** | Dihitung global menggunakan `skimage.metrics.structural_similarity`. |
-| **Edge-PSNR** | PSNR yang dibatasi hanya pada region edge (lihat [bagian novelty](#5-edge-psnr--metrik-evaluasi-tambahan)). |
+| **PSNR** | Computed globally per image using `skimage.metrics.peak_signal_noise_ratio`, averaged per batch. |
+| **SSIM** | Computed globally using `skimage.metrics.structural_similarity`. |
+| **Edge-PSNR** | PSNR restricted to edge regions only (see [novelty section](#5-edge-psnr--additional-evaluation-metric)). |
 
-Validasi dijalankan tiap akhir epoch (`validate()`), dengan output SR di-*clamp* ke `[0, 1]` sebelum dihitung metriknya.
+Validation runs at the end of every epoch (`validate()`), with SR output *clamped* to `[0, 1]` before metrics are computed.
 
 ---
 
-## ⚙️ Konfigurasi Eksperimen
+## ⚙️ Experiment Configuration
 
-Dikelola melalui class `AnimeConfig`:
+Managed via the `AnimeConfig` class:
 
 ```python
 scale          = 2
@@ -193,53 +193,53 @@ scheduler      = CosineAnnealingLR (eta_min=1e-7)
 grad_clip_norm = 1.0
 ```
 
-Tersedia juga fungsi `main_finetuning()` untuk **melanjutkan training dari checkpoint** (resume) maupun **fine-tuning** dengan learning rate baru, lengkap dengan restore state optimizer & scheduler.
+A `main_finetuning()` function is also available for **resuming training from a checkpoint** or **fine-tuning** with a new learning rate, including full restoration of optimizer & scheduler state.
 
 ---
 
-## 🗂️ Struktur Proyek
+## 🗂️ Project Structure
 
-> *(disesuaikan dengan struktur sel pada notebook — sesuaikan kembali jika kode dipecah ke file `.py` terpisah)*
+> *(matches the cell structure of the notebook — adjust accordingly if the code is split into separate `.py` files)*
 
 ```
 .
-├── swinir-l1.ipynb          # Notebook utama (model, training, evaluasi)
-├── dataset_split/            # Hasil preprocessing (train/test, HR/LR)
-├── experiments_anime/        # Output eksperimen & log
-└── model_epoch_*_*.pth       # Checkpoint hasil training
+├── swinir-l1.ipynb          # Main notebook (model, training, evaluation)
+├── dataset_split/            # Preprocessing output (train/test, HR/LR)
+├── experiments_anime/        # Experiment output & logs
+└── model_epoch_*_*.pth       # Training checkpoints
 ```
 
-Modul-modul kunci dalam notebook:
+Key modules within the notebook:
 - **Model:** `SwinIR`, `RSTB`, `SwinTransformerBlock`, `WindowAttention`, `Mlp`
 - **Loss:** `SobelOperator`, `SobelLoss`, `CombinedLoss`, `AdaptiveSobelLoss`
 - **Data:** `SRDataset`, `SingleFolderDataset`, `build_dataloaders`
-- **Utilitas:** `AverageMeter`, `calculate_psnr`, `calculate_ssim`, `calculate_edge_psnr`, `get_edge_mask`
+- **Utilities:** `AverageMeter`, `calculate_psnr`, `calculate_ssim`, `calculate_edge_psnr`, `get_edge_mask`
 - **Training:** `build_model`, `build_loss`, `train_epoch`, `validate`, `main`, `main_finetuning`
 
 ---
 
-## ▶️ Cara Menjalankan
+## ▶️ How to Run
 
 ```bash
 pip install timm
 ```
 
-1. **Preprocessing dataset** — jalankan sel *Resize & Split Dataset* untuk membentuk pasangan LR–HR dari dataset mentah.
-2. **Training dari awal:**
+1. **Preprocess the dataset** — run the *Resize & Split Dataset* cell to build LR–HR pairs from the raw dataset.
+2. **Train from scratch:**
    ```python
    main()
    ```
-3. **Resume / fine-tuning dari checkpoint:**
+3. **Resume / fine-tune from a checkpoint:**
    ```python
    main_finetuning(
        checkpoint_path="model_epoch_2_adaptive.pth",
        load_optimizer=True,
-       new_lr=None,          # None = lanjutkan LR dari checkpoint
+       new_lr=None,          # None = continue with the checkpoint's LR
        additional_epochs=2,
        new_batch_size=8
    )
    ```
-4. **Cek metadata checkpoint** tanpa load model penuh:
+4. **Check checkpoint metadata** without loading the full model:
    ```python
    read_checkpoint_metadata("model_epoch_2_adaptive.pth")
    ```
@@ -248,31 +248,31 @@ pip install timm
 
 ## 💾 Checkpoint & Metadata
 
-Setiap checkpoint (`.pth`) menyimpan, selain `model_state_dict`/`optimizer_state_dict`/`scheduler_state_dict`:
-- Hyperparameter lengkap (scale, window size, loss type, pixel/sobel weight, dll.)
-- Metrik training & validasi per epoch (`train_loss`, `pixel_loss`, `edge_loss`, `val_psnr`, `val_ssim`, `val_edge_psnr`)
-- Metadata eksperimen (waktu, device, durasi epoch, institusi)
+Each checkpoint (`.pth`) stores, in addition to `model_state_dict`/`optimizer_state_dict`/`scheduler_state_dict`:
+- Full hyperparameters (scale, window size, loss type, pixel/sobel weight, etc.)
+- Training & validation metrics per epoch (`train_loss`, `pixel_loss`, `edge_loss`, `val_psnr`, `val_ssim`, `val_edge_psnr`)
+- Experiment metadata (timestamp, device, epoch duration, institution)
 
 ---
 
-## ⚠️ Batasan & Catatan Teknis
+## ⚠️ Limitations & Technical Notes
 
-- **Skala eksperimen:** konfigurasi contoh menggunakan `num_epochs = 2` dan `LIMIT_DATA` terbatas — ini cocok untuk *pipeline sanity check*, namun hasil kuantitatif penuh memerlukan training pada keseluruhan dataset dengan jumlah epoch yang representatif.
-- **Kernel Sobel vertikal:** mohon diperiksa kembali baris terakhir kernel `sobel_y` pada `SobelOperator` — kernel Sobel vertikal standar adalah `[[-1,-2,-1],[0,0,0],[1,2,1]]`, namun pada implementasi saat ini baris terakhir tertulis `[1,2,3]`. Ini sebaiknya dikoreksi sebelum dilaporkan sebagai hasil final, karena akan sedikit menggeser arah gradien yang terdeteksi.
-- **Arsitektur tidak dimodifikasi:** seluruh peningkatan performa (jika ada) berasal dari sisi loss/training objective, bukan dari perubahan struktural SwinIR. Hal ini perlu dinyatakan secara eksplisit di bagian metodologi agar klaim kontribusi akurat (kontribusi pada *training objective* dan *evaluation metric*, bukan pada *network architecture*).
-
----
-
-## 🔭 Rencana Pengembangan
-
-- Eksperimen ablasi sistematis antar varian loss (`l1` vs `sobel` vs `combined` vs `adaptive`) dengan jumlah epoch yang setara untuk perbandingan yang adil.
-- Validasi pada scale factor lain (×3, ×4).
-- Studi sensitivitas terhadap `sobel_weight` dan `edge_threshold` pada Edge-PSNR.
-- Perbaikan kernel Sobel vertikal pada `SobelOperator`.
+- **Experiment scale:** the example configuration uses `num_epochs = 2` with a limited `LIMIT_DATA` — suitable for a *pipeline sanity check*, but full quantitative results require training on the complete dataset with a representative number of epochs.
+- **Vertical Sobel kernel:** please double-check the last row of the `sobel_y` kernel in `SobelOperator` — the standard vertical Sobel kernel is `[[-1,-2,-1],[0,0,0],[1,2,1]]`, but the current implementation has `[1,2,3]` as the last row. This should be corrected before being reported as a final result, as it will slightly shift the detected gradient direction.
+- **Architecture unchanged:** all performance gains (if any) come from the loss/training-objective side, not from structural changes to SwinIR. This should be stated explicitly in the methodology section to keep the contribution claim accurate (contribution to the *training objective* and *evaluation metric*, not the *network architecture*).
 
 ---
 
-## 📚 Referensi
+## 🔭 Future Work
+
+- Systematic ablation experiments across loss variants (`l1` vs `sobel` vs `combined` vs `adaptive`) with an equal number of epochs for a fair comparison.
+- Validation on other scale factors (×3, ×4).
+- Sensitivity study on `sobel_weight` and `edge_threshold` for Edge-PSNR.
+- Fix the vertical Sobel kernel in `SobelOperator`.
+
+---
+
+## 📚 References
 
 ```bibtex
 @inproceedings{liang2021swinir,
@@ -288,6 +288,6 @@ Setiap checkpoint (`.pth`) menyimpan, selain `model_state_dict`/`optimizer_state
 
 ---
 
-## 📝 Lisensi & Atribusi
+## 📝 License & Attribution
 
-Implementasi arsitektur SwinIR diadaptasi dari [repositori resmi](https://github.com/JingyunLiang/SwinIR) (Ze Liu, dimodifikasi oleh Jingyun Liang). Mohon cantumkan atribusi yang sesuai jika kode ini digunakan ulang, serta sitasi pada paper asli SwinIR di atas.
+The SwinIR architecture implementation is adapted from the [official repository](https://github.com/JingyunLiang/SwinIR) (Ze Liu, modified by Jingyun Liang). Please include appropriate attribution if this code is reused, along with a citation to the original SwinIR paper above.
