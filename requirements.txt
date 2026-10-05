@@ -1,0 +1,10 @@
+# Everything below is preinstalled on Kaggle GPU images; nothing needs `pip install` there.
+torch>=2.3
+numpy
+pillow
+scipy          # Wilcoxon test in analyze.py (optional, the rest works without it)
+matplotlib     # figures in analyze.py (optional)
+# Optional:
+# scikit-image   # cross-check of PSNR/SSIM in the readiness gate
+# lpips          # perceptual metric: scripts/evaluate.py --lpips
+# pytest         # python -m pytest tests -q  (or: python tests/test_core.py)

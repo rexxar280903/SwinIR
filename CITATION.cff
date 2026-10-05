@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below, and cite SwinIR (Liang et al., 2021)."
+title: "Edge-Aware Loss for SwinIR Super-Resolution of Anime Faces"
+type: software
+authors:
+  - alias: rexxar280903
+    # Replace the alias with your name before publishing, e.g.
+    # family-names: "..."
+    # given-names: "..."
+repository-code: "https://github.com/rexxar280903/SwinIR"
+keywords:
+  - super-resolution
+  - SwinIR
+  - edge-aware loss
+  - anime
+references:
+  - type: conference-paper
+    title: "SwinIR: Image Restoration Using Swin Transformer"
+    authors:
+      - family-names: Liang
+        given-names: Jingyun
+      - family-names: Cao
+        given-names: Jiezhang
+      - family-names: Sun
+        given-names: Guolei
+      - family-names: Zhang
+        given-names: Kai
+      - family-names: Van Gool
+        given-names: Luc
+      - family-names: Timofte
+        given-names: Radu
+    collection-title: "IEEE/CVF International Conference on Computer Vision Workshops (ICCVW)"
+    year: 2021

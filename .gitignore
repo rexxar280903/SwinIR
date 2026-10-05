@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+# experiment outputs (keep them out of git; publish results via RESULTS.md / releases)
+data/
+runs/
+readiness/
+tmp/
+*.pt
+*.pth
+!configs/*.json

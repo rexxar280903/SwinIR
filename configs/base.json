@@ -1,0 +1,36 @@
+{
+  "seed": 0,
+  "model": "light",
+  "scale": 2,
+  "lr_size": 64,
+  "edge_mode": "none",
+  "edge_weight": 0.0,
+  "batch_size": 32,
+  "total_iters": 20000,
+  "lr": 0.0002,
+  "betas": [
+    0.9,
+    0.999
+  ],
+  "eta_min": 1e-07,
+  "warmup_iters": 0,
+  "grad_clip": 1.0,
+  "amp": true,
+  "augment": true,
+  "num_workers": 2,
+  "cache": true,
+  "log_every": 100,
+  "val_every": 2000,
+  "ckpt_every": 2000,
+  "val_max_images": 0,
+  "metrics": {
+    "crop_border": 2,
+    "edge_threshold": 0.5,
+    "ssim_window": 11,
+    "ssim_sigma": 1.5,
+    "sensitivity_thresholds": [
+      0.25,
+      1.0
+    ]
+  }
+}
