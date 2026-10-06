@@ -138,7 +138,7 @@ SSIM-Y show whether edge gains cost global fidelity.
 
 | Setting | Value | Note |
 |---|---|---|
-| Iterations | 20,000 (set by the GPU budget, gate R6.1) | the same for every condition |
+| Iterations | 10,000 ≈ 23 epochs (set by the GPU budget, gate R6.1: 32 img/s on a T4, 2.8 h per run) | the same for every condition |
 | Batch | 32 LR images of 64 × 64 | whole images, no patch cropping |
 | Optimiser | Adam, β = (0.9, 0.999), lr 2·10⁻⁴ | as in the official SwinIR training code (KAIR) |
 | Schedule | cosine from 2·10⁻⁴ to 10⁻⁷ over all iterations, per step | a function of the step, so resuming cannot change it; official: step decay over 500 k iterations |

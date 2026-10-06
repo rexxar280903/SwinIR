@@ -202,6 +202,26 @@ def test_holm():
     assert np.isclose(adj["a"], 0.03) and np.isclose(adj["c"], 0.06) and np.isclose(adj["b"], 0.06)
 
 
+def test_budget_survives_oom_of_comparison_preset():
+    """A comparison preset that does not fit in GPU memory is reported, not a failed gate."""
+    def fake_throughput(preset, batch_size, device, amp):
+        if preset == "medium":
+            raise torch.cuda.OutOfMemoryError("CUDA out of memory (simulated)")
+        return {"img_per_s": 100.0, "s_per_iter": 0.32, "peak_mem_gb": 5.0}
+
+    saved = R.measure_throughput, R.measure_eval_speed
+    R.measure_throughput, R.measure_eval_speed = fake_throughput, lambda *a, **k: 0.001
+    try:
+        cuda = torch.device("cuda")
+        status, detail, ev = R.check_budget(TrainConfig(), data_root(), cuda, 1e6, ("medium",))
+        assert status == "PASS" and "medium: does not fit" in detail, detail
+        assert ev["presets"]["medium"] == {"oom_at_batch": 32}
+        status, detail, _ = R.check_budget(TrainConfig(model="medium"), data_root(), cuda, 1e6, ())
+        assert status == "FAIL" and "lower batch_size" in detail, detail
+    finally:
+        R.measure_throughput, R.measure_eval_speed = saved
+
+
 def test_image_metrics_perfect_prediction():
     hr = torch.rand(2, 3, 32, 32)
     m = image_metrics(hr, hr, MetricConfig())
