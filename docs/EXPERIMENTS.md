@@ -51,7 +51,7 @@ runs (seeds 1, 2, 3) at the λ* chosen on validation data.
 
 ## 4. Runs
 
-All runs share `configs/base.json` (model `light`, 20,000 iterations × batch 32, see METHOD.md §5).
+All runs share `configs/base.json` (model `light`, 10,000 iterations × batch 32, see METHOD.md §5).
 A run is identified by `{model}_x2_{condition}_s{seed}`.
 
 | Stage | Seeds | Conditions | Runs |
@@ -68,7 +68,7 @@ the sweep by a lucky seed gets no advantage in the test comparison.
 
 Implemented in `edgesr/ablation.py: select_weights`; the result is saved as `runs/selection.json`.
 
-1. For every sweep run, take the mean of the last 3 validation points (16 k, 18 k and 20 k for 20 k iterations)
+1. For every sweep run, take the mean of the last 3 validation points (6 k, 8 k and 10 k for 10 k iterations)
    of Edge-PSNR-Y and of PSNR-Y.
 2. A λ is *eligible* if its PSNR-Y is at most 0.10 dB below the L1 run of the same seed.
 3. λ* = the eligible λ with the highest Edge-PSNR-Y; differences below 0.01 dB count as ties and
@@ -79,7 +79,7 @@ Implemented in `edgesr/ablation.py: select_weights`; the result is saved as `run
 
 ## 5. Evaluation
 
-* The final weights of each run (iteration 20,000) are evaluated once on the test split, in
+* The final weights of each run (iteration 10,000) are evaluated once on the test split, in
   float32, and the per-image values are written to `test_per_image.csv`.
 * Metrics: PSNR-Y, SSIM-Y, Edge-PSNR-Y (τ = 0.5; 0.25 and 1.0 as sensitivity), GMSD, PSNR-RGB,
   SSIM-RGB, edge coverage; LPIPS if the package is available (secondary).
@@ -95,7 +95,7 @@ Implemented in `edgesr/ablation.py: select_weights`; the result is saved as `run
 | Targets may be waifu2x outputs (AUDIT.md §D) | "HR" detail is partly synthetic; models learn to imitate waifu2x | All conditions share the targets, so the comparison holds; the data section states the source and its likely processing |
 | One dataset, faces only, 128 px | Results may not transfer to full anime frames, other line art, or larger images | Stated as scope; no claim beyond anime faces at ×2 |
 | Bicubic degradation only | Not real-world SR | Stated as scope (classical SR setting) |
-| `light` model, 20 k iterations | Absolute PSNR below a fully trained SwinIR; the loss effect might differ for larger models | Budget measured in the gate; the medium preset's cost is reported; claims limited to the trained setting |
+| `light` model, 10 k iterations | Absolute PSNR below a fully trained SwinIR; the loss effect might differ for larger models | Budget measured in the gate; the medium preset's cost is reported; claims limited to the trained setting |
 | Three seeds | Coarse estimate of training variance | Two-level bootstrap, per-seed differences shown, all-seeds-agree rule |
 | Edge-PSNR is our own metric | Risk of a metric that favours our loss | GMSD (established), τ sensitivity, PSNR/SSIM reported side by side |
 | λ chosen on one seed | Selection noise | Confirmation on new seeds; the whole sweep is reported |
@@ -107,7 +107,13 @@ Gate check R6.1 measures, on the Kaggle GPU, the training throughput of the mode
 the data-loader throughput and the evaluation cost, and reports the projected GPU hours of the
 whole plan and the largest `total_iters` that fits the budget given with `--gpu-hours`. If the
 plan does not fit, `total_iters` in `configs/base.json` is lowered **before** the lock (it is the
-same for every condition). With two T4 GPUs, `run_ablation.py --shard 1/2` and `--shard 2/2` run
+same for every condition).
+
+Measured on Kaggle (2026-10-06, Tesla T4, PyTorch 2.11): `light` trains at 32 img/s with a peak of
+12.3 GB; 20,000 iterations would take 5.6 h per run and about 112 GPU hours for 20 runs. `medium`
+does not fit in T4 memory at batch 32. `total_iters` was therefore set to 10,000 (≈ 23 epochs,
+2.8 h per run, about 57 GPU hours, i.e. about 30 notebook hours with two T4s in parallel) before
+the lock. With two T4 GPUs, `run_ablation.py --shard 1/2` and `--shard 2/2` run
 two runs at once (cell 6 of `notebooks/kaggle_runner.ipynb`).
 
 ## 8. Readiness gate

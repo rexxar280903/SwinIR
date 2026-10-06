@@ -35,7 +35,7 @@ optionally LPIPS. Definitions: [docs/METHOD.md](docs/METHOD.md).
 |---|---|
 | Data | Kaggle *anime faces waifu2x*; HR 128², LR 64² by bicubic; exact duplicates removed, near-duplicates kept within one split; 80/10/10 train/val/test |
 | Model | SwinIR-light (0.91 M parameters), official code, unchanged |
-| Training | 20,000 iterations × batch 32, Adam 2·10⁻⁴, cosine decay, flips/rotations, fp16 on GPU |
+| Training | 10,000 iterations × batch 32 (≈ 23 epochs), Adam 2·10⁻⁴, cosine decay, flips/rotations, fp16 on GPU |
 | Stage 1 | seed 0: L1 + 5 λ values × {static, adaptive} = 11 runs (+ a pre-registered grid extension if λ* lands on the edge of the grid) |
 | Stage 2 | seeds 1–3: L1, static(λ*), adaptive(λ*) = 9 runs |
 | Hypotheses | H1 adaptive > L1 and H2 adaptive > static on Edge-PSNR-Y; H3 adaptive non-inferior to L1 on PSNR-Y (0.05 dB) |
@@ -114,7 +114,7 @@ docs/PANDUAN_ID.md        full walkthrough in Indonesian
   images are not redistributed here.
 * Bicubic degradation only, faces only, 128 × 128 HR, ×2. No claim is made about real-world
   degradations, full illustrations or larger scales.
-* The lightweight SwinIR is trained for 20 k iterations to fit a free GPU quota, so absolute
+* The lightweight SwinIR is trained for 10 k iterations to fit a free GPU quota, so absolute
   PSNR is below a fully trained model; the comparison between losses is the object of study.
 * Gradient losses for SR exist (e.g. Ma et al., 2020; Abrahamyan et al., 2022). The question here
   is the effect of edge-strength weighting under a controlled protocol, not a new loss family.
