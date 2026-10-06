@@ -1,0 +1,97 @@
+{
+  "protocol_hash": "880e20cfba12",
+  "base_config": {
+    "seed": 0,
+    "model": "light",
+    "scale": 2,
+    "lr_size": 64,
+    "edge_mode": "none",
+    "edge_weight": 0.0,
+    "batch_size": 32,
+    "total_iters": 10000,
+    "lr": 0.0002,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "eta_min": 1e-07,
+    "warmup_iters": 0,
+    "grad_clip": 1.0,
+    "amp": true,
+    "augment": true,
+    "num_workers": 2,
+    "cache": true,
+    "log_every": 100,
+    "val_every": 2000,
+    "ckpt_every": 2000,
+    "val_max_images": 0,
+    "metrics": {
+      "crop_border": 2,
+      "edge_threshold": 0.5,
+      "ssim_window": 11,
+      "ssim_sigma": 1.5,
+      "sensitivity_thresholds": [
+        0.25,
+        1.0
+      ]
+    }
+  },
+  "plan": {
+    "sweep_weights": [
+      0.05,
+      0.1,
+      0.2,
+      0.5,
+      1.0
+    ],
+    "sweep_seeds": [
+      0
+    ],
+    "confirm_seeds": [
+      1,
+      2,
+      3
+    ],
+    "n_training_runs": 20
+  },
+  "selection_rule": {
+    "metric": "edge_psnr_y",
+    "split": "val",
+    "last_k": 3,
+    "psnr_guard_db": 0.1
+  },
+  "hypotheses": {
+    "H1": "adaptive(w*) > L1 on test Edge-PSNR-Y",
+    "H2": "adaptive(w*) > static(w*) on test Edge-PSNR-Y",
+    "H3": "adaptive(w*) non-inferior to L1 on test PSNR-Y, margin 0.05 dB",
+    "decision": "95% two-level bootstrap CI excludes 0, Holm-adjusted Wilcoxon p < 0.05 (H1-H2), and all per-seed differences share the sign; H3: CI lower bound > -0.05 dB"
+  },
+  "dataset": {
+    "version": "anime-x2-v1",
+    "counts": {
+      "train": 14070,
+      "val": 1759,
+      "test": 1758
+    },
+    "limit": null,
+    "manifest_sha1": "71d4b957b7870871afd32c9cdf28a35aa0547360"
+  },
+  "code": {
+    "commit": "e358175c86ea1d44da41ecafb8ac5cae0f0d2fd5",
+    "dirty": false,
+    "files": {
+      "edgesr/__init__.py": "ff0242ff4d6c",
+      "edgesr/ablation.py": "6d2833771004",
+      "edgesr/config.py": "a9b1da3f8944",
+      "edgesr/data.py": "9c6bb9e726ff",
+      "edgesr/engine.py": "f01aef5d7aa7",
+      "edgesr/losses.py": "a85e4594cadd",
+      "edgesr/metrics.py": "7eaaaf945eea",
+      "edgesr/models/__init__.py": "3a634f052d92",
+      "edgesr/models/swinir.py": "386be2ef6b40",
+      "edgesr/readiness.py": "b59216dc9cf1",
+      "edgesr/stats.py": "eb6e510831f8",
+      "edgesr/utils.py": "98c17090d66b"
+    }
+  }
+}
