@@ -10,10 +10,12 @@ Groups
     R0 environment   R1 data          R2 loss/metric correctness   R3 model
     R4 training      R5 pipeline      R6 GPU budget                R7 protocol lock
 """
+import gc
 import hashlib
 import inspect
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
@@ -44,6 +46,19 @@ OFFICIAL_SWINIR_URL = "https://raw.githubusercontent.com/JingyunLiang/SwinIR/mai
 SESSION_HOURS = 12.0  # Kaggle GPU session limit at the time of writing; check the Kaggle docs
 
 
+def free_gpu_memory():
+    """Drop dead tensors and hand cached CUDA blocks back to the driver.
+
+    PyTorch's caching allocator keeps freed memory reserved for this process. Without this,
+    a heavy check (e.g. fp32 training at batch 32) leaves the GPU full for the next check
+    and for the dry-run subprocess, which then fails with CUDA out-of-memory.
+    """
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+
+
 class Report:
     def __init__(self, log=print):
         self.items = []
@@ -56,6 +71,7 @@ class Report:
         except Exception as exc:  # a crashing check is a failed check
             status, detail = "FAIL", f"{type(exc).__name__}: {exc}"
             evidence = {"traceback": traceback.format_exc(limit=4)}
+        free_gpu_memory()
         item = {"id": gid, "title": title, "status": status, "detail": detail,
                 "seconds": round(time.time() - t0, 1), "evidence": evidence or {}}
         self.items.append(item)
@@ -506,7 +522,11 @@ def check_test_isolation(data_root):
     return "PASS", "test split refuses to load without allow_test; train() never requests it", {}
 
 
-def check_amp(base, mini_root, device, iters=30):
+def check_amp(base, mini_root, device, iters=30, batch_size=8):
+    """Train the same model in fp32 and under AMP; the losses must track each other.
+
+    A small batch is enough to compare the numerics; batch 32 in fp32 needs ~13 GB on its own.
+    """
     if device.type != "cuda":
         return "SKIP", "AMP is only used on CUDA", {}
     if not base.amp:
@@ -522,7 +542,7 @@ def check_amp(base, mini_root, device, iters=30):
         g = torch.Generator().manual_seed(0)
         losses = []
         for _ in range(iters):
-            idx = torch.randint(0, len(ds), (base.batch_size,), generator=g).tolist()
+            idx = torch.randint(0, len(ds), (batch_size,), generator=g).tolist()
             lr = torch.stack([ds[i][0] for i in idx]).to(device)
             hr = torch.stack([ds[i][1] for i in idx]).to(device)
             with engine.autocast(device, amp):
@@ -532,8 +552,10 @@ def check_amp(base, mini_root, device, iters=30):
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()
-            losses.append(float(loss))
+            losses.append(loss.item())
         res["amp" if amp else "fp32"] = losses
+        del model, opt, scaler, lr, hr, sr, loss
+        free_gpu_memory()
     a, f = np.mean(res["amp"][-5:]), np.mean(res["fp32"][-5:])
     rel = abs(a - f) / f
     finite = all(math.isfinite(x) for x in res["amp"])
@@ -542,7 +564,7 @@ def check_amp(base, mini_root, device, iters=30):
         return "FAIL", "non-finite loss under AMP; set amp=false", ev
     if rel > 0.10:
         return "WARN", f"AMP and fp32 diverge after {iters} steps (rel. diff {rel:.1%})", ev
-    return "PASS", f"AMP tracks fp32 over {iters} steps (final loss {a:.4f} vs {f:.4f})", ev
+    return "PASS", f"AMP tracks fp32 over {iters} steps, batch {batch_size} (final loss {a:.4f} vs {f:.4f})", ev
 
 
 # =========================================================================== R5 pipeline
@@ -554,13 +576,16 @@ def check_dry_run(mini_root, work, quick):
                  "num_workers=0", "cache=false", "amp=false"]
     cmd = [sys.executable, str(REPO / "scripts" / "run_ablation.py"), "--data", str(mini_root),
            "--runs", str(runs), "--stage", "all", "--set", *overrides]
+    free_gpu_memory()  # the subprocess needs the GPU memory this process has cached
+    env = {**os.environ, "PYTORCH_CUDA_ALLOC_CONF": os.environ.get("PYTORCH_CUDA_ALLOC_CONF",
+                                                                   "expandable_segments:True")}
     t0 = time.time()
-    p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
     if p.returncode != 0:
         return "FAIL", f"run_ablation.py exited {p.returncode}: {p.stderr.strip()[-400:]}", {}
     p2 = subprocess.run([sys.executable, str(REPO / "scripts" / "analyze.py"), "--runs", str(runs),
                          "--data", str(mini_root), "--n-boot", "200"],
-                        capture_output=True, text=True, encoding="utf-8", errors="replace")
+                        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
     if p2.returncode != 0:
         return "FAIL", f"analyze.py exited {p2.returncode}: {p2.stderr.strip()[-400:]}", {}
     res = (runs / "analysis" / "RESULTS.md").read_text(encoding="utf-8")
@@ -660,11 +685,18 @@ def check_budget(base, data_root, device, gpu_hours, compare_presets):
     loader = check_loader(base, data_root)
     n_val_eval = min(n_val, base.val_max_images or n_val)
     val_points = base.total_iters // base.val_every + (base.total_iters % base.val_every != 0)
-    rows = {}
+    rows, oom = {}, []
     for preset in [base.model] + [p for p in compare_presets if p != base.model]:
-        thr = measure_throughput(preset, base.batch_size, device, base.amp)
-        val_s = measure_eval_speed(preset, device, amp=base.amp)
-        test_s = measure_eval_speed(preset, device, amp=False)
+        free_gpu_memory()
+        try:
+            thr = measure_throughput(preset, base.batch_size, device, base.amp)
+            val_s = measure_eval_speed(preset, device, amp=base.amp)
+            test_s = measure_eval_speed(preset, device, amp=False)
+        except torch.cuda.OutOfMemoryError:
+            oom.append(preset)
+            continue
+        finally:
+            free_gpu_memory()
         train_s = base.total_iters * base.batch_size / min(thr["img_per_s"], loader["loader_img_per_s"])
         per_run = (train_s + val_points * n_val_eval * val_s + n_test * test_s
                    + (n_train + n_val_eval) * loader["cache_load_s_per_img"] + 30)
@@ -676,9 +708,13 @@ def check_budget(base, data_root, device, gpu_hours, compare_presets):
                         "per_run_h": round(per_run / 3600, 2), "total_h": round(total_h, 1),
                         "epochs_per_run": round(base.total_iters * base.batch_size / n_train, 1),
                         "max_total_iters_within_budget": fit_iters}
+    gpu_gb = torch.cuda.get_device_properties(device).total_memory / 2 ** 30
+    ev = {"presets": rows, "out_of_memory": oom, "loader": loader, "n_runs": n_runs,
+          "gpu_hours_budget": gpu_hours, "total_iters": base.total_iters, "batch_size": base.batch_size}
+    if base.model in oom:
+        return "FAIL", (f"{base.model} runs out of GPU memory at batch {base.batch_size} on this "
+                        f"{gpu_gb:.1f} GB GPU; lower batch_size or keep amp=true"), ev
     r = rows[base.model]
-    ev = {"presets": rows, "loader": loader, "n_runs": n_runs, "gpu_hours_budget": gpu_hours,
-          "total_iters": base.total_iters, "batch_size": base.batch_size}
     detail = (f"{base.model}: {r['img_per_s']:.0f} img/s (loader {loader['loader_img_per_s']:.0f}), "
               f"{r['peak_mem_gb']:.1f} GB, {r['per_run_h']:.2f} h/run x {n_runs} runs = {r['total_h']:.1f} GPU-h "
               f"({r['epochs_per_run']} epochs/run); budget {gpu_hours} h -> total_iters <= "
@@ -686,6 +722,8 @@ def check_budget(base, data_root, device, gpu_hours, compare_presets):
     for p, v in rows.items():
         if p != base.model:
             detail += f"; {p}: {v['img_per_s']:.0f} img/s, {v['total_h']:.1f} GPU-h"
+    for p in oom:
+        detail += f"; {p}: does not fit in {gpu_gb:.1f} GB at batch {base.batch_size} (comparison only)"
     if loader["loader_img_per_s"] < 1.2 * r["img_per_s"]:
         detail += " | data loader is the bottleneck: raise num_workers or keep cache=true"
     if r["per_run_h"] > SESSION_HOURS:
