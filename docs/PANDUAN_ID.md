@@ -371,6 +371,30 @@ Rencana TinyLLM butuh GPU mulai **November** (pilot M5, eksperimen M7–M10, ±2
 Minggu-minggu Oktober ini GPU masih bebas, jadi jalankan ablation SwinIR **sekarang** agar tidak
 berebut kuota. Angka kuota mingguan Kaggle berubah-ubah; cek halaman akunmu.
 
+### 7.5b Dua akun (dua peneliti, masing-masing GPU T4 x2)
+
+Setiap akun milik **orang yang berbeda** (aturan Kaggle: satu orang satu akun). Dengan dua akun ada
+4 GPU; setiap GPU mendapat satu *shard* (akun 1: shard 1/4 dan 2/4, akun 2: 3/4 dan 4/4). Urutan run
+deterministik, jadi shard tidak pernah tumpang tindih. Perkiraan dengan 10.000 iterasi (±2,8 jam/run):
+
+| Ronde | Akun 1 (`ACCOUNT, N_ACCOUNTS = 1, 2`) | Akun 2 (`2, 2`) | Lama |
+|---|---|---|---|
+| 0 | Sel 1–5, gate; R7.1 harus PASS | Sel 1–5, gate; R7.1 harus PASS | ±20 menit |
+| 1 | Save & Run All: sweep 6 run + bicubic | Save & Run All: sweep 5 run | ±8,5 jam |
+| Tukar | Output → New Dataset, *share* ke akun 2 | Output → New Dataset, *share* ke akun 1 | |
+| 2 | Kedua dataset jadi input, `IMPORT` = kedua folder `runs`; Save & Run All | sama | ±8,5 jam |
+| 3 (hanya jika grid diperluas) | Tukar lagi output ronde 2, lalu Save & Run All | sama | ±8,5 jam |
+| Akhir | Impor semua output, jalankan sel 1–3, 6, 9, 10 (tanpa GPU) | | ±10 menit |
+
+Catatan:
+- Kedua notebook harus memakai **commit yang sama** (cek baris pertama output sel 1) dan lulus gate
+  dengan `configs/protocol_lock.json` yang sudah di-commit. Itu menjamin data dan kode identik.
+- Pemilihan λ* dihitung dari log validasi sweep yang sama, jadi kedua akun selalu memilih λ* yang
+  sama (diuji dengan simulasi dua akun).
+- Path dataset input di Kaggle bisa berbentuk `/kaggle/input/datasets/<pemilik>/<nama>/...`; cek
+  dengan `!ls -R /kaggle/input | head` sebelum mengisi `IMPORT`.
+- Di ronde 1, sel 8 hanya mencetak bahwa ia menunggu sweep akun lain. Itu normal.
+
 ### 7.6 Troubleshooting
 
 | Gejala | Penyebab | Solusi |
