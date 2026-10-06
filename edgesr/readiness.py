@@ -10,6 +10,7 @@ Groups
     R0 environment   R1 data          R2 loss/metric correctness   R3 model
     R4 training      R5 pipeline      R6 GPU budget                R7 protocol lock
 """
+import gc
 import hashlib
 import inspect
 import json
@@ -44,6 +45,13 @@ OFFICIAL_SWINIR_URL = "https://raw.githubusercontent.com/JingyunLiang/SwinIR/mai
 SESSION_HOURS = 12.0  # Kaggle GPU session limit at the time of writing; check the Kaggle docs
 
 
+def free_gpu():
+    """Return cached GPU memory to the driver, so a later check (or a subprocess) can use it."""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 class Report:
     def __init__(self, log=print):
         self.items = []
@@ -56,6 +64,7 @@ class Report:
         except Exception as exc:  # a crashing check is a failed check
             status, detail = "FAIL", f"{type(exc).__name__}: {exc}"
             evidence = {"traceback": traceback.format_exc(limit=4)}
+        free_gpu()
         item = {"id": gid, "title": title, "status": status, "detail": detail,
                 "seconds": round(time.time() - t0, 1), "evidence": evidence or {}}
         self.items.append(item)
@@ -532,7 +541,7 @@ def check_amp(base, mini_root, device, iters=30):
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()
-            losses.append(float(loss))
+            losses.append(loss.item())
         res["amp" if amp else "fp32"] = losses
     a, f = np.mean(res["amp"][-5:]), np.mean(res["fp32"][-5:])
     rel = abs(a - f) / f
@@ -598,6 +607,7 @@ def measure_throughput(preset, batch_size, device, amp, iters=40, warmup=10):
     lr = torch.rand(batch_size, 3, 64, 64, device=device)
     hr = torch.rand(batch_size, 3, 128, 128, device=device)
     if device.type == "cuda":
+        free_gpu()
         torch.cuda.reset_peak_memory_stats()
     for i in range(warmup + iters):
         if i == warmup:
@@ -660,11 +670,21 @@ def check_budget(base, data_root, device, gpu_hours, compare_presets):
     loader = check_loader(base, data_root)
     n_val_eval = min(n_val, base.val_max_images or n_val)
     val_points = base.total_iters // base.val_every + (base.total_iters % base.val_every != 0)
-    rows = {}
+    rows, oom = {}, {}
     for preset in [base.model] + [p for p in compare_presets if p != base.model]:
-        thr = measure_throughput(preset, base.batch_size, device, base.amp)
-        val_s = measure_eval_speed(preset, device, amp=base.amp)
-        test_s = measure_eval_speed(preset, device, amp=False)
+        try:
+            thr = measure_throughput(preset, base.batch_size, device, base.amp)
+            val_s = measure_eval_speed(preset, device, amp=base.amp)
+            test_s = measure_eval_speed(preset, device, amp=False)
+        except torch.cuda.OutOfMemoryError:
+            oom[preset] = True
+        free_gpu()  # outside the except block, so the traceback no longer pins the tensors
+        if oom.get(preset):
+            if preset == base.model:
+                return "FAIL", (f"{preset} does not fit in GPU memory at batch {base.batch_size}: "
+                                "lower batch_size in configs/base.json (before the lock)"), {}
+            rows[preset] = {"oom_at_batch": base.batch_size}
+            continue
         train_s = base.total_iters * base.batch_size / min(thr["img_per_s"], loader["loader_img_per_s"])
         per_run = (train_s + val_points * n_val_eval * val_s + n_test * test_s
                    + (n_train + n_val_eval) * loader["cache_load_s_per_img"] + 30)
@@ -684,7 +704,9 @@ def check_budget(base, data_root, device, gpu_hours, compare_presets):
               f"({r['epochs_per_run']} epochs/run); budget {gpu_hours} h -> total_iters <= "
               f"{r['max_total_iters_within_budget']}")
     for p, v in rows.items():
-        if p != base.model:
+        if p != base.model and "oom_at_batch" in v:
+            detail += f"; {p}: does not fit in GPU memory at batch {v['oom_at_batch']} (comparison only)"
+        elif p != base.model:
             detail += f"; {p}: {v['img_per_s']:.0f} img/s, {v['total_h']:.1f} GPU-h"
     if loader["loader_img_per_s"] < 1.2 * r["img_per_s"]:
         detail += " | data loader is the bottleneck: raise num_workers or keep cache=true"
