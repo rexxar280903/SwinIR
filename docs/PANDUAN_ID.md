@@ -395,6 +395,32 @@ Catatan:
   dengan `!ls -R /kaggle/input | head` sebelum mengisi `IMPORT`.
 - Di ronde 1, sel 8 hanya mencetak bahwa ia menunggu sweep akun lain. Itu normal.
 
+### 7.5c Akun 2 menyusul setelah sesi akun 1 selesai
+
+Kalau akun 1 sudah menjalankan ronde 1 sendirian, akun 2 **tidak** memakai `2, 2`. Jatah shard
+`2, 2` hanya cocok kalau akun 1 memakai `1, 2`; kalau akun 1 memakai `1, 1` (bawaan notebook),
+sebagian run akan dijalankan dua kali dan sebagian lagi tidak pernah dijalankan. Cara yang benar
+untuk kedua kasus:
+
+1. **Akun 1:** buka versi notebook yang sudah selesai → *Output* → **New Dataset**, lalu
+   *Settings → Sharing* → tambahkan akun 2.
+2. **Akun 2:** *File → Import Notebook* → `notebooks/kaggle_runner.ipynb` dari `main`. Panel kanan:
+   GPU T4 x2, Internet On, *Add Input* → `anime-faces-waifu2x` **dan** dataset output akun 1.
+3. Sel 2: biarkan `ACCOUNT, N_ACCOUNTS = 1, 1`, isi `IMPORT = ["/kaggle/input/<...>/runs"]`
+   (cek path dengan `!ls -R /kaggle/input | grep -m5 "runs:"`).
+4. Jalankan sel 1–6 secara interaktif. Gate (sel 5) harus lulus dengan R7.1 PASS. Sel 6 mencetak
+   rencana: run dari akun 1 harus berstatus `evaluated`, sisanya `todo`.
+5. **Save & Run All.** Run hasil impor dilewati; run sweep yang tersisa dibagi ke 2 GPU. Contoh:
+   kalau akun 1 sudah menyelesaikan L1 + 5 static, akun 2 menjalankan 5 adaptive (3 + 2 run, ±9,5 jam).
+6. Setelah sweep, sel 8 hanya memulai *extend*/*confirm* kalau satu run (`RUN_HOURS`) masih muat
+   dalam sisa `SESSION_HOURS`; kalau tidak muat, ia mencetak `not started`. Itu normal. Batas ini
+   mencegah sesi melewati 12 jam dan dihentikan Kaggle, yang bisa membuat output hilang.
+7. **Ronde berikutnya (confirm, 9 run):** output akun 2 sudah berisi **semua** run sweep (hasil impor
+   ikut tersalin). Jadikan dataset dan bagikan ke akun 1. Lalu kedua akun memasukkannya ke `IMPORT`,
+   akun 1 memakai `1, 2` dan akun 2 memakai `2, 2`, dan keduanya menjalankan *Save & Run All*
+   bersamaan (±9,5 jam). Kalau grid perlu diperluas, ronde ini menjalankan *extend* dulu; tukar
+   output sekali lagi seperti di §7.5b.
+
 ### 7.6 Troubleshooting
 
 | Gejala | Penyebab | Solusi |
