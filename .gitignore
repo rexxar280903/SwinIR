@@ -10,3 +10,35 @@ tmp/
 *.pt
 *.pth
 !configs/*.json
+
+# Full local analysis and manuscripts. Publish only reviewed copies in public/.
+/dashboard/
+/docs/paper/
+/swinir-json-check-*/
+
+# Credentials, machine settings, archives, and generated model/data binaries.
+.env
+.env.*
+!.env.example
+.codex/
+.aws/
+.ssh/
+.venv/
+venv/
+node_modules/
+kaggle.json
+credentials.json
+*service-account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.onnx
+*.safetensors
+*.ckpt
+*.npy
+*.npz

@@ -4,12 +4,15 @@ Does telling a super-resolution network *where the edges are* make it draw sharp
 This repository trains the unmodified **SwinIR** transformer (Liang et al., 2021) for ×2
 super-resolution of anime faces with three objectives, an L1 pixel loss, L1 plus a **static**
 Sobel edge loss, and L1 plus an **adaptive** Sobel edge loss that weights each pixel by the
-strength of the ground-truth edge, and compares them in a pre-registered, multi-seed ablation.
+strength of the ground-truth edge, and compares them in an internally locked, multi-seed ablation.
 
-> **Status (2026-10-05): code and protocol ready, results pending.** The readiness gate passes on
-> CPU with synthetic data; the full ablation has not been run yet. No numbers are reported here
-> until it has. An earlier notebook version was audited and found unusable for results; see
-> [docs/AUDIT.md](docs/AUDIT.md).
+> **Status (2026-10-11): Kaggle v5 experiments completed.** The archive contains 24 completed
+> training runs and 25 evaluations including bicubic. Validation selects static λ=1 and
+> adaptive λ=2. On confirmation seeds 1–3, static achieves Edge-PSNR-Y 32.012 ± 0.045 dB,
+> adaptive 31.405 ± 0.099 dB, and L1 30.332 ± 0.060 dB. H1 and H3 are supported; H2 is not.
+> See the [public dashboard, Indonesian paper, and numerical tables](public/README.md).
+> Dataset images and model checkpoints are not redistributed. The earlier notebook audit
+> remains available in [docs/AUDIT.md](docs/AUDIT.md).
 
 ## What is compared
 

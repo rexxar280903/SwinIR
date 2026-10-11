@@ -148,4 +148,8 @@ resolved or acknowledged in writing) on the Kaggle GPU with the full dataset bef
 
 | Date | Deviation | Reason | Effect on conclusions |
 |---|---|---|---|
-| – | – | – | – |
+| 2026-10-11 | Kaggle v5 archive confirmed: 24 training runs, including the one-time grid extension, and one bicubic evaluation completed | Report final executed experiments | 10,000 iterations throughout; static λ=1 and adaptive λ=2 selected on validation; seed 1–3 confirmation supports H1/H3 but not H2. Numerical exports: `public/results/`; paper and dashboard: `public/`. |
+
+The protocol lock is an internal configuration record. This repository does not establish
+an externally registered preregistration. The public artifacts exclude dataset examples,
+per-image records, checkpoints, and the complete local archive.
